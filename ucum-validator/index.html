@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WASM Text Validator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            margin-bottom: 15px;
+            box-sizing: border-box;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #4CAF50;
+        }
+
+        .valid {
+            border-color: #4CAF50 !important;
+        }
+
+        .invalid {
+            border-color: #f44336 !important;
+        }
+
+        .validation-result {
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+
+        .valid-result {
+            background-color: #dff0d8;
+            color: #3c763d;
+        }
+
+        .invalid-result {
+            background-color: #f2dede;
+            color: #a94442;
+        }
+
+        .loading {
+            color: #666;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>UCUM Validator</h1>
+    <p>Type UCUM code and see if it's valid</p>
+
+    <input type="text" id="textInput" placeholder="Enter text to validate..." autocomplete="off" />
+
+    <div id="validationResult" class="validation-result">
+        Start typing to see validation results...
+    </div>
+</div>
+
+<script src="wasm_exec.js"></script>
+<script>
+    // Load and initialize WebAssembly
+    async function initWasm() {
+        const go = new Go();
+
+        try {
+            const result = await WebAssembly.instantiateStreaming(
+                fetch("main.wasm"),
+                go.importObject
+            );
+
+            go.run(result.instance);
+
+            // Enable input after WASM is loaded
+            document.getElementById('textInput').disabled = false;
+            document.getElementById('textInput').placeholder = "Enter text to validate...";
+
+        } catch (error) {
+            console.error("Error loading WASM:", error);
+            document.getElementById('validationResult').innerHTML =
+                '<span style="color: red;">Error loading validator. Please refresh the page.</span>';
+        }
+    }
+
+    // Initialize when page loads
+    window.addEventListener('load', () => {
+        // Disable input until WASM is loaded
+        const input = document.getElementById('textInput');
+        input.disabled = true;
+        input.placeholder = "Loading validator...";
+
+        initWasm();
+    });
+
+    // Real-time validation
+    let validationTimeout;
+    document.getElementById('textInput').addEventListener('input', function(e) {
+        const input = e.target;
+        const resultDiv = document.getElementById('validationResult');
+
+        // Clear previous timeout
+        clearTimeout(validationTimeout);
+
+        // Show loading state
+        resultDiv.innerHTML = '<span class="loading">Validating...</span>';
+        resultDiv.className = 'validation-result';
+
+        // Debounce validation to avoid too many calls
+        validationTimeout = setTimeout(() => {
+            try {
+                // Call the Go WASM function
+                const validationResult = validateUCUM(input.value);
+
+                // Update UI based on validation result
+                if (validationResult.valid) {
+                    input.classList.remove('invalid');
+                    input.classList.add('valid');
+                    resultDiv.innerHTML = '✓ ' + validationResult.reason;
+                    resultDiv.className = 'validation-result valid-result';
+                } else {
+                    input.classList.remove('valid');
+                    input.classList.add('invalid');
+                    resultDiv.innerHTML = '✗ ' + validationResult.reason;
+                    resultDiv.className = 'validation-result invalid-result';
+                }
+            } catch (error) {
+                console.error("Validation error:", error);
+                resultDiv.innerHTML = '<span style="color: red;">Validation error occurred</span>';
+            }
+        }, 300); // 300ms debounce
+    });
+</script>
+</body>
+</html>
